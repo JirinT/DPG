@@ -39,5 +39,15 @@ the target q value contains the policy, so to make it numerically stable, we nee
 - The target networks can be updated continuously (smoothly) by the equation:
 
 $$
-0^{-}←\left(1-\tau\right) \theta^{-} + \tau\theta
+\theta^{-}←\left(1-\tau\right)\theta^{-}+\tau\theta
+$$
+
+which basically is low pass filter with filter constant Tau.
+
+- **Mini-batch sampling** for updating the networks
+- **Batch normalization**
+- **Exploration rate** - Since the policy is deterministic, we require exploratory behavior policy. Standard approach is to add noise to the drawn actions from deterministic policy for example using Ornstein-Uhlenbeck process:
+
+$$
+u_k \sim b(u|x_k) = \mu(x_k, \theta_k) + \nu_k, \quad \nu_k = \lambda \nu_{k-1} + \sigma \epsilon_{k-1}
 $$
