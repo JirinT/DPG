@@ -39,5 +39,5 @@ the target q value contains the policy, so to make it numerically stable, we nee
 - The target networks can be updated continuously (smoothly) by the equation:
 
 $$
-0^{-}<-\left(1-\tau\right) \theta^{-} + \tau\theta
+0^{-}\u2190\left(1-\tau\right) \theta^{-} + \tau\theta
 $$
