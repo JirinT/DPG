@@ -35,3 +35,9 @@ $$
 $$
 
 the target q value contains the policy, so to make it numerically stable, we need to put there delayed policy net.
+
+- The target networks can be updated continuously (smoothly) by the equation:
+
+$$
+0^{-}<-\left(1-\tau\right) \theta^{-} + \tau\theta
+$$
