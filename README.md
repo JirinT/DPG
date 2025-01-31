@@ -23,3 +23,15 @@ We want to change the policy parameters in a direction of actions which will inc
 
 The DPG implemented is COPDAC-Q algorithm and is described originally here: http://proceedings.mlr.press/v32/silver14.pdf and here on medium platform: https://medium.com/geekculture/introduction-to-deterministic-policy-gradient-dpg-e7229d5248e2
 It uses linear approximations for the policy, Q function, and value function.
+
+# DDPG
+- It actually is DQN + DPG. Deep means that Q value is aproximated by neural network and policy as well.
+## Usefull tweaks:
+- **Experience replay buffer**
+- **Target networks**, like in DQN where a target (delayed) network was used to compute the target Q-value which was used for updating Q-network parameters - it was updated to equall the training Q value every now and then. But now we need to introduce second target network for policy, because as can be seen in this equation:
+
+$$
+\mathcal{L}(w) = \left[(r + \gamma q(x', \mu(x', \theta), w)) - q(x, u, w)\right]^{\frac{2}{D}}
+$$
+
+the target q value contains the policy, so to make it numerically stable, we need to put there delayed policy net.
