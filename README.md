@@ -7,6 +7,8 @@ If we consider ON-Policy deterministic policy learning, then there is no inheren
 
 ![Equation](https://latex.codecogs.com/svg.image?&space;a_{k&plus;1}=\lambda&space;a_k&plus;\sigma\varepsilon&space;)
 
+Where $a$ is output noise (The action), $0<\lambda<1$ is a smoothing factor and $\sigma$ is variance scaling a standard Gaussian distribution.
+
 Since the action space is continuous, the policy is moved in the direction of Q function's gradient. Instead of maximizing Q by taking argmax(Q) action like in Q-learning, in DPG the policy will converge to maximal Q value. This Q function's gradient can be expressed as an expectation over behavioral state distribution: 
 
 ![Equation](https://latex.codecogs.com/svg.image?\mathbb{E}_{s%20\sim%20\rho^{\mu^k}}%20\left[%20\nabla_{\theta}%20Q^{\mu^k}%20\left(%20s,%20\mu_\theta%20(s)%20\right)%20\right])
