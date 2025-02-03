@@ -51,3 +51,5 @@ which basically is low pass filter with filter constant Tau.
 $$
 u_k \sim b(u|x_k) = \mu(x_k, \theta_k) + \nu_k, \quad \nu_k = \lambda \nu_{k-1} + \sigma \epsilon_{k-1}
 $$
+
+- update of the policy values is done via the chain rule equation above. But in pytorch, we can just call q_value.backward() and it will compute both the policy gradient wrt its parameters and q-value gradient wrt action.
