@@ -10,3 +10,4 @@ class Policy:
         action = torch.tanh(action) # make sure the action is in (-1,1) range
 
         return action
+    
