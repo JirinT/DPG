@@ -1,6 +1,7 @@
 import gymnasium as gym
 import torch
 import numpy as np
+import statistics
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
@@ -14,7 +15,7 @@ def compute_q_values(batch):
     states = torch.stack([experience[0] for experience in batch])
     actions = torch.tensor([experience[1] for experience in batch]).unsqueeze(dim=1)
     rewards = torch.tensor([experience[2] for experience in batch]).unsqueeze(dim=1)
-    next_states = torch.stack([torch.from_numpy(experience[3]) for experience in batch])
+    next_states = torch.stack([torch.as_tensor(experience[3], dtype=torch.float32) for experience in batch])
     terminated = torch.tensor([int(experience[4]) for experience in batch]).unsqueeze(dim=1)
 
     with torch.no_grad():
@@ -26,7 +27,8 @@ def compute_q_values(batch):
     return q_target, q_predicted
 
 def update_online_q_net(target_q, predicted_q):
-    loss = online_Q.loss_fcn(target_q, predicted_q)
+    loss = online_Q.loss_fcn(predicted_q, target_q)
+    loss_dict["q_value_loss"].append(loss)
 
     online_Q.optimizer.zero_grad()
     loss.backward()
@@ -38,37 +40,40 @@ def update_policy(batch):
     states = torch.stack([experience[0] for experience in batch])
     actions = online_policy(states) # deterministic actions used to update policy
     current_q_values = online_Q(torch.cat((states, actions), dim=1))
+    loss = -current_q_values.mean()
+    loss_dict["policy_loss"].append(loss)
 
-    for p in online_policy.parameters():
-        p.grad = None
-    current_q_values.sum().backward()
-    with torch.no_grad():
-        for p in online_policy.parameters():
-             p.copy_(p - POLICY_LEARNING_RATE * p.grad)
+    online_policy.optimizer.zero_grad()
+    loss.backward()
+    online_policy.optimizer.step()
 
 def soft_update(target, source, tau):
     for target_param, source_param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(tau*source_param.data + (1-tau)*target_param.data)
 
-NUM_EPISODES = 11
-Q_LEARNING_RATE = .0005
-POLICY_LEARNING_RATE = .00005
-REPLAY_MEMORY_SIZE = 100000
+NUM_EPISODES = 101
+Q_LEARNING_RATE = .001
+POLICY_LEARNING_RATE = .0001
+REPLAY_MEMORY_SIZE = 200000
 BATCH_SIZE = 128
+MIN_BUFFER_TO_PLAY = 10000
 TAU = .01 # Update filter constant
-OU_LAMBDA = 0.9
-OU_SIGMA = 0.3
+OU_LAMBDA = 1
+OU_SIGMA = 0.8
 GAMMA = .99
-VIDEO_PERIOD = 5
+VIDEO_PERIOD = 10
+
 torch.autograd.set_detect_anomaly(True)
 
 env = gym.make("MountainCarContinuous-v0")
+# env= gym.make("Pendulum-v1")
 evaluation_env = gym.make("MountainCarContinuous-v0", render_mode="rgb_array")
+# evaluation_env = gym.make("Pendulum-v1", render_mode="rgb_array")
 evaluation_env = RecordVideo(evaluation_env, video_folder="cartpole-agent", name_prefix="ep",
                   episode_trigger=lambda x: x % VIDEO_PERIOD == 0)
 
-online_policy = DeterministicPolicy(env.observation_space.shape[0])
-target_policy = DeterministicPolicy(env.observation_space.shape[0])
+online_policy = DeterministicPolicy(env.observation_space.shape[0], learning_rate=POLICY_LEARNING_RATE)
+target_policy = DeterministicPolicy(env.observation_space.shape[0], learning_rate=POLICY_LEARNING_RATE)
 target_policy.load_state_dict(online_policy.state_dict()) # initialise both networks with the same parameters
 
 online_Q = Q_nn(env.observation_space.shape[0], env.action_space.shape[0], learning_rate=Q_LEARNING_RATE)
@@ -80,47 +85,108 @@ ou_noise = OU_noise(lam=OU_LAMBDA, sigma=OU_SIGMA) # Ornstein Uhlbeck noise
 
 reward_list = []
 
-for _ in tqdm(range(NUM_EPISODES)):
-    state = env.reset()[0]
+online_policy_stats = {
+    "episode_mean_actions": [],
+    "episode_std_actions": []
+}
 
+target_policy_stats = {
+    "episode_actions":  [],
+    "episode_mean_actions": [],
+    "episode_std_actions": [],
+    "episode_rewards": [],
+    "episode_mean_rewards": [],
+    "episode_std_rewards": []
+}
+
+loss_dict = {
+    "policy_loss": [],
+    "q_value_loss": []
+}
+
+for episode in tqdm(range(NUM_EPISODES)):
+    state = env.reset()[0]
+    ou_noise.reset()
     done = False
+    episode_actions = []
+    online_policy.train()
+    step = 0
     while not done:
         state = torch.tensor(state, dtype=torch.float32)
         with torch.no_grad():
             action = online_policy(state)
             action += ou_noise.sample()
             action = torch.clamp(action, -1, 1) # ensure action is in the correct range after adding noise
+        episode_actions.append(action.item())
 
         next_state, reward, terminated, truncated, info = env.step(action.detach().numpy())
+
         replay_memory.push((state, action, reward, next_state, terminated))
         state = next_state
 
         done = terminated or truncated
 
-        if len(replay_memory) >= BATCH_SIZE:
+        if len(replay_memory) >= MIN_BUFFER_TO_PLAY and step%20==0:
             batch = replay_memory.sample(BATCH_SIZE)
             target_q, predicted_q = compute_q_values(batch)
             update_online_q_net(target_q, predicted_q)
             update_policy(batch)
-            soft_update(target_Q, online_Q, TAU)
-            soft_update(target_policy, online_policy, TAU)
+        step += 1
 
+    soft_update(target_Q, online_Q, TAU)
+    soft_update(target_policy, online_policy, TAU)
+
+    # update statistics dictionary:
+    online_policy_stats["episode_mean_actions"].append(statistics.mean(episode_actions))
+    online_policy_stats["episode_std_actions"].append(statistics.stdev(episode_actions))
+
+    # reset episode setting for evaluation:
     done = False
     state = evaluation_env.reset()[0]
-    rewards = 0
+    episode_actions = []
+    episode_rewards = []
+    online_policy.eval()
     while not done:
         state = torch.tensor(state, dtype=torch.float32)
         with torch.no_grad():
-            action = target_policy(state)
+            action = online_policy(state)
+
         next_state, reward, terminated, truncated, _ = evaluation_env.step(action.detach().numpy())
-        rewards += reward
         state = next_state
         done = terminated or truncated
+        episode_actions.append(action.item())
+        episode_rewards.append(reward)
 
-    reward_list.append(rewards)
+    target_policy_stats["episode_mean_actions"].append(statistics.mean(episode_actions))
+    target_policy_stats["episode_std_actions"].append(statistics.stdev(episode_actions))
+    target_policy_stats["episode_mean_rewards"].append(statistics.mean(episode_rewards))
+    target_policy_stats["episode_std_rewards"].append(statistics.stdev(episode_rewards))
 
 env.close()
 
-plt.figure()
-plt.plot(reward_list)
+
+# Visualize data
+plt.figure("Statistics")
+plt.subplot(3,1,1)
+plt.plot(online_policy_stats["episode_mean_actions"], c="r", label="Mean")
+plt.plot(online_policy_stats["episode_std_actions"], c="b", label="Std")
+plt.legend()
+plt.title("Action statistics in training")
+plt.grid(True)
+
+plt.subplot(3,1,2)
+plt.plot(target_policy_stats["episode_mean_actions"], c="r", label="Mean")
+plt.plot(target_policy_stats["episode_std_actions"], c="b", label="Std")
+plt.legend()
+plt.title("Action statistics in evalutation")
+plt.grid(True)
+
+plt.subplot(3,1,3)
+plt.plot(target_policy_stats["episode_mean_rewards"], c="r", label="Mean")
+plt.plot(target_policy_stats["episode_std_rewards"], c="b", label="Std")
+plt.legend()
+plt.title("Reward statistics in evaluation")
+plt.xlabel("Episodes")
+plt.grid(True)
+
 plt.show()

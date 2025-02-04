@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 class DeterministicPolicy(nn.Module):
-    def __init__(self, state_space):
+    def __init__(self, state_space, learning_rate):
         super().__init__()
         self.linear_net = nn.Sequential(
             nn.Linear(state_space, 64),
@@ -14,6 +14,6 @@ class DeterministicPolicy(nn.Module):
             nn.Linear(32,1)          
         )
 
-    def forward(self, x):
-        action = self.linear_net(x)
-        return torch.tanh(acti
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
+
+ 

@@ -12,7 +12,7 @@ class Q_nn(nn.Module):
             nn.Linear(64, 32),
             nn.ReLU(),
             nn.BatchNorm1d(32),
-            nn.Linear(32,1)
+            nn.Linear(32, action_space)
         )
 
         self.loss_fcn = nn.MSELoss()
