@@ -1,13 +1,6 @@
-from DDPG.replay_memory import ReplayMemory
+from DDPG.ornstein_uhlbeck_noise import OU_noise
 
-a = (1,2,3)
-b = (4,5,6)
-c = (7,8,9)
+ou_noise = OU_noise(0.5, 0.3)
 
-mem = ReplayMemory(10)
-mem.push(a)
-mem.push(b)
-mem.push(c)
-
-batch = mem.sample(3)
-print([item[1] for item in batch])
+for _ in range(15):
+    print(ou_noise.sample())

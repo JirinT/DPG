@@ -16,4 +16,6 @@ class DeterministicPolicy(nn.Module):
 
         self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
 
- 
+    def forward(self, x):
+        action = self.linear_net(x)
+        return 2*torch.tanh(action)
