@@ -209,13 +209,4 @@ plt.figure("Learning curves")
 plt.subplot(2,1,1)
 plt.plot(loss_dict["policy_loss"], c="r")
 plt.ylabel("Loss")
-plt.title("Policy learning curve")
-plt.grid(True)
-
-plt.subplot(2,1,2)
-plt.plot(loss_dict["q_value_loss"], c="r")
-plt.ylabel("Loss")
-plt.title("Q-value learning curve")
-plt.grid(True)
-
-plt.show()
+plt.title("Policy learnin

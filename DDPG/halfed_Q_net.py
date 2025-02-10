@@ -16,3 +16,5 @@ class Q_nn(nn.Module):
         fc1_relu = self.relu(fc1)
         fc2 = self.fc2(torch.cat((fc1_relu, action), dim=1))
         fc2_relu = self.relu(fc2)
+
+        return self.fc3(fc2_relu)
