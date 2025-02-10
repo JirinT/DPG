@@ -1,51 +1,56 @@
 import gymnasium as gym
 import torch
-import numpy as np
 import statistics
+
 from matplotlib import pyplot as plt
 from tqdm import tqdm
-
 from policy_nn import DeterministicPolicy
 from replay_memory import ReplayMemory
-from Q_net import Q_nn
+# from Q_net import Q_nn
+from halfed_Q_net import Q_nn
 from ornstein_uhlbeck_noise import OU_noise
+from normalizer import Normalizer
 from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
 
 def compute_q_values(batch):
-    # states = torch.stack([experience[0] for experience in batch])
-    # actions = torch.tensor([experience[1] for experience in batch]).unsqueeze(dim=1)
-    # rewards = torch.tensor([experience[2] for experience in batch]).unsqueeze(dim=1)
-    # next_states = torch.stack([torch.as_tensor(experience[3], dtype=torch.float32) for experience in batch])
-    # terminated = torch.tensor([int(experience[4]) for experience in batch]).unsqueeze(dim=1)
-
     states = torch.stack([torch.as_tensor(experience[0], dtype=torch.float32) for experience in batch])
     actions = torch.tensor([experience[1] for experience in batch], dtype=torch.float32).unsqueeze(dim=1)
     rewards = torch.tensor([experience[2] for experience in batch], dtype=torch.float32).unsqueeze(dim=1)
     next_states = torch.stack([torch.as_tensor(experience[3], dtype=torch.float32) for experience in batch])
     terminated = torch.tensor([int(experience[4]) for experience in batch], dtype=torch.float32).unsqueeze(dim=1)
 
+    # compute target Q:
     with torch.no_grad():
-        next_q_values = target_Q(torch.cat((next_states, target_policy(next_states)), dim=1)) # the input needs to be one tensor
+        # normalized_next_states_actions = normalizer.normalize(torch.cat((next_states, target_policy(next_states)), dim=1))
+        # next_q_values = target_Q(normalized_next_states_actions) # the input needs to be one tensor
+        next_q_values = target_Q(next_states, target_policy(next_states)) # the input needs to be one tensor
     
     q_target = rewards + (1-terminated)*GAMMA*next_q_values.detach()
-    q_predicted = online_Q(torch.cat((states, actions), dim=1))
+
+    # compute predicted Q:
+    # normalized_states_actions = normalizer.normalize(torch.cat((states, actions), dim=1))
+    # q_predicted = online_Q(normalized_states_actions)
+    q_predicted = online_Q(states, actions)
 
     return q_target, q_predicted
 
-def update_online_q_net(target_q, predicted_q):
-    loss = online_Q.loss_fcn(predicted_q, target_q)
+def update_online_q_net(target_q, predicted_q): # critic
+    loss = Q_loss_fcn(predicted_q, target_q)
     loss_dict["q_value_loss"].append(loss.item())
 
     online_Q.optimizer.zero_grad()
     loss.backward()
     online_Q.optimizer.step()
 
-def update_policy(batch):
+def update_policy(batch): # actor
     # the actions needs to be computed again because they need to be predicted by the current policy if I want to use it to update the current policy!!!
     # so the q_value needs to be recomputed as well!!!
     states = torch.stack([experience[0] for experience in batch])
     actions = online_policy(states) # deterministic actions used to update policy
-    current_q_values = online_Q(torch.cat((states, actions), dim=1))
+    # normalized_states_actions = normalizer.normalize(torch.cat((states, actions), dim=1))
+    # current_q_values = online_Q(normalized_states_actions)
+    current_q_values = online_Q(states, actions)
+
     loss = -current_q_values.mean()
     loss_dict["policy_loss"].append(loss.item())
 
@@ -57,22 +62,23 @@ def soft_update(target, source, tau):
     for target_param, source_param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(tau * source_param.data + (1 - tau) * target_param.data)
 
-NUM_EPISODES = 1001
-Q_LEARNING_RATE = .001
-POLICY_LEARNING_RATE = .0001
-REPLAY_MEMORY_SIZE = 200000
+NUM_EPISODES = 101  # Increase from MountainCarContinuous since Pendulum is more complex
+Q_LEARNING_RATE = 1e-3
+POLICY_LEARNING_RATE = 1e-4
+REPLAY_MEMORY_SIZE = int(1e5)  # Larger buffer helps stabilize learning
 BATCH_SIZE = 128
-MIN_BUFFER_TO_PLAY = 25000
-TAU = .01 # Update filter constant
-OU_LAMBDA = .8
-OU_SIGMA = .6
-GAMMA = .99
-VIDEO_PERIOD = 100
+MIN_BUFFER_TO_PLAY = 1000  # Start training after collecting enough experience
+TAU = 1e-3
+  # Smaller value ensures smooth target network updates
+OU_LAMBDA = .3  # Lower noise decay rate for more stability
+OU_SIGMA = .4  # Less exploration noise than MountainCarContinuous
+GAMMA = 0.99  # Standard discount factor
+VIDEO_PERIOD = 10  # For evaluation/visualization
 
 torch.autograd.set_detect_anomaly(True)
 
 # env = gym.make("MountainCarContinuous-v0")
-env= gym.make("Pendulum-v1")
+env = gym.make("Pendulum-v1")
 # evaluation_env = gym.make("MountainCarContinuous-v0", render_mode="rgb_array")
 evaluation_env = gym.make("Pendulum-v1", render_mode="rgb_array")
 evaluation_env = RecordVideo(evaluation_env, video_folder="cartpole-agent", name_prefix="ep",
@@ -85,7 +91,9 @@ target_policy.load_state_dict(online_policy.state_dict()) # initialise both netw
 online_Q = Q_nn(env.observation_space.shape[0], env.action_space.shape[0], learning_rate=Q_LEARNING_RATE)
 target_Q = Q_nn(env.observation_space.shape[0], env.action_space.shape[0], learning_rate=Q_LEARNING_RATE)
 target_Q.load_state_dict(online_Q.state_dict()) # initialise both networks with the same parameters
+Q_loss_fcn = torch.nn.MSELoss()
 
+normalizer = Normalizer(num_features=3)
 # set target policies to eval mode since they do not require gradients
 target_policy.eval()
 target_Q.eval()
@@ -120,7 +128,7 @@ for episode in tqdm(range(NUM_EPISODES)):
     done = False
     episode_actions = []
     online_policy.train()
-    step = 0
+    
     while not done:
         state = torch.tensor(state, dtype=torch.float32)
         with torch.no_grad():
@@ -131,17 +139,16 @@ for episode in tqdm(range(NUM_EPISODES)):
 
         next_state, reward, terminated, truncated, info = env.step(action.detach().numpy())
 
-        replay_memory.push((state, action, reward, next_state, terminated))
+        replay_memory.push((state.detach(), action.detach(), reward, next_state, terminated))
         state = next_state
 
         done = terminated or truncated
 
-        if len(replay_memory) >= MIN_BUFFER_TO_PLAY and step%20==0:
+        if len(replay_memory) >= MIN_BUFFER_TO_PLAY:
             batch = replay_memory.sample(BATCH_SIZE)
             target_q, predicted_q = compute_q_values(batch)
             update_online_q_net(target_q, predicted_q)
             update_policy(batch)
-        step += 1
 
     soft_update(target_Q, online_Q, TAU)
     soft_update(target_policy, online_policy, TAU)
@@ -174,7 +181,6 @@ for episode in tqdm(range(NUM_EPISODES)):
 
 env.close()
 
-
 # Visualize data
 plt.figure("Statistics")
 plt.subplot(3,1,1)
@@ -198,7 +204,6 @@ plt.legend()
 plt.title("Reward statistics in evaluation")
 plt.xlabel("Episodes")
 plt.grid(True)
-
 
 plt.figure("Learning curves")
 plt.subplot(2,1,1)

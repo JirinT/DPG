@@ -1,6 +1,10 @@
-from DDPG.ornstein_uhlbeck_noise import OU_noise
+from DDPG.normalizer import Normalizer
+import torch
 
-ou_noise = OU_noise(0.5, 0.3)
+normalizer = Normalizer(4)
 
-for _ in range(15):
-    print(ou_noise.sample())
+features = torch.tensor([[1,1,1,1],
+                         [2,2,2,2],
+                         [3,3,3,3]], dtype=torch.float32)
+
+print(normalizer.normalize(features))

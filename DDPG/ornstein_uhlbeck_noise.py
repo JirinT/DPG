@@ -7,7 +7,7 @@ class OU_noise():
         self.sigma = sigma
     
     def sample(self):
-        self.noise = self.lambda_koef*self.noise + self.sigma*torch.randn(1)
+        self.noise += -self.lambda_koef*self.noise + self.sigma*torch.randn(1)
         return self.noise
     
     def reset(self):
