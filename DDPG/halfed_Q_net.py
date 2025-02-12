@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.functional as F
+from adabound import AdaBound
+
 
 class Q_nn(nn.Module):
     def __init__(self, state_space, action_space, learning_rate):
@@ -11,6 +12,7 @@ class Q_nn(nn.Module):
         self.relu = nn.ReLU()
 
         self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
+        # self.optimizer = AdaBound(self.parameters(), lr=0.0001, final_lr=0.01)
     def forward(self, states, action):
         fc1 = self.fc1(states)
         fc1_relu = self.relu(fc1)

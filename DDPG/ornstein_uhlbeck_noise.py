@@ -1,14 +1,17 @@
 import torch
+import numpy as np
 
 class OU_noise():
-    def __init__(self, lam, sigma):
+    def __init__(self, theta, sigma, dt=0.01):
         self.noise = 0
-        self.lambda_koef = lam
+        self.theta = theta
         self.sigma = sigma
-    
+        self.dt = dt
+
     def sample(self):
-        self.noise += -self.lambda_koef*self.noise + self.sigma*torch.randn(1)
-        return self.noise
+        # self.noise += self.theta*self.noise*self.dt + self.sigma*torch.randn(1)
+        self.noise += -self.theta*self.noise*self.dt + self.sigma*np.sqrt(self.dt)*np.random.normal(loc=0, scale=1)
+        return torch.tensor(self.noise)
     
     def reset(self):
         self.noise = 0
