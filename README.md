@@ -1,3 +1,4 @@
+Good source: https://github.com/upb-lea/reinforcement_learning_course_materials/blob/master/exercises/templates/ex12/DDPG_and_PPO.ipynb
 # DPG
 Unlike a stochastic policy, deterministic policy maps state S directly to action A: $u_{theta}: S->A$.
 
