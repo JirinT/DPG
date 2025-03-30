@@ -60,3 +60,6 @@ $$
 - update of the policy values is done via the chain rule equation above. But in pytorch, we can just call q_value.backward() and it will compute both the policy gradient wrt its parameters and q-value gradient wrt action.
 
 - the Q-network is updated (trained) using the actions from replay memory - the actions used in environment with added noise! But the policy network needs to be updated with deterministic actions corresponding to its current policy!!! So when updating policy, actions needs to be recomputed for current batch states and corresponding Q-values as well.
+
+- The target networks needs to be updated smoothly in each step!!! - not after each episode.
+- The **hyperparameters** are very sensitive and important to make the DDPG algorithm converge. 
